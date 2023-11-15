@@ -30,10 +30,10 @@ with open("server_public.pem", "rb") as f:
 
 
 tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Initialize TCP socket
-print(f"[*] Connecting to {sHOST}:{sPORT}...")  # Return status
+print(f"{Fore.YELLOW}[*] Connecting to {sHOST}:{sPORT}...{Fore.RESET}")  # Return status
 
 tcp.connect((sHOST, sPORT))  # Connect to server
-print("[+] Connected.")  # Return status
+print(f"{Fore.GREEN}[+] Connected {Fore.RESET}")  # Return status
 
 name = input("Enter your name: ")  # Client inputs username
 
@@ -45,7 +45,7 @@ def listen():  # Function to listen for messages
             decrypted_msg = rsa.decrypt(message, client_private).decode('utf-8')  # Decrypt Message
             print("\n" + decrypted_msg)  # Print message
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"{Fore.RED}Error: {e}{Fore.RESET}")
             break  # Break if error occurs
 
 
@@ -62,3 +62,4 @@ while True:
     tcp.send(encrypted_msg)  # Send Message
 
 tcp.close()  # Close socket
+print("{Fore.RED}[!] Connection Closed ")
