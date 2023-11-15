@@ -1,6 +1,14 @@
 import socket
 import threading
 import rsa
+from colorama import Fore, init
+
+
+init()  # Colorama
+colors = [Fore.BLUE, Fore.LIGHTBLUE_EX, Fore.CYAN, Fore.LIGHTCYAN_EX,
+          Fore.GREEN, Fore.LIGHTGREEN_EX, Fore.RED, Fore.LIGHTRED_EX,
+          Fore.MAGENTA, Fore.LIGHTMAGENTA_EX, Fore.YELLOW, Fore.LIGHTYELLOW_EX,
+          Fore.WHITE]
 
 # Server Connection Info
 sHOST = socket.gethostbyname(socket.gethostname())
@@ -35,7 +43,7 @@ tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create TCP Socket
 tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Set Socket to be Reusable
 tcp.bind((sHOST, sPORT))  # Bind Socket to Server
 tcp.listen(5)  # Only 5 Connection can queue at once
-print(f"[*] Live on {sHOST}:{sPORT}")  # Print Socket Connection Info
+print(f"{Fore.GREEN}[*] Live on {sHOST}:{sPORT} {Fore.RESET}")  # Print Socket Connection Info
 
 
 # Function to Listen for Client Connections
@@ -45,7 +53,7 @@ def client_connect(cSOCKET):
             message = cSOCKET.recv(1024)  # Adjust buffer size as needed
             decrypted_msg = decryption_from_client(message)
         except Exception as e: # Error Handling
-            print(f"[!] Error: {e}")
+            print(f"{Fore.RED}[!] Error: {e} {Fore.RESET}")
             cSOCKETS.remove(cSOCKET)  # Remove bad clients
         for clientSOCKET in cSOCKETS:  # For loop to send message to all connected users
             clientSOCKET.send(encryption_to_client(decrypted_msg))  # Send Message
@@ -54,11 +62,11 @@ def client_connect(cSOCKET):
 try:
     while True:
         cSOCKET, uADDRESS = tcp.accept()
-        print(f"[+] {uADDRESS} connected.")
+        print(f"{Fore.GREEN}[+] {uADDRESS} connected. {Fore.RESET}")
         cSOCKETS.add(cSOCKET)
         threading.Thread(target=client_connect, args=(cSOCKET,), daemon=True).start()
 except KeyboardInterrupt:
-    print("Server shutting down...")
+    print(f"{Fore.Yellow}[*] Server shutting down...{Fore.RESET}")
 finally:
     for client in cSOCKETS:
         client.close()
