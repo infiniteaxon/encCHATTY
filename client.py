@@ -4,7 +4,6 @@ import threading
 import rsa
 from datetime import datetime
 from colorama import Fore, init
-from keys import create_keys
 
 init()  # Colorama
 colors = [Fore.BLUE, Fore.LIGHTBLUE_EX, Fore.CYAN, Fore.LIGHTCYAN_EX,
@@ -18,17 +17,6 @@ sHOST = "192.168.146.1"  # Server IP
 sPORT = 2003  # Server Port
 sep = "<SEP>"
 
-# Open RSA Keys
-with open("client_public.pem", "rb") as f:
-    client_public = rsa.PublicKey.load_pkcs1(f.read())
-
-with open("client_private.pem", "rb") as f:
-    client_private = rsa.PrivateKey.load_pkcs1(f.read())
-
-with open("server_public.pem", "rb") as f:
-    server_public = rsa.PublicKey.load_pkcs1(f.read())
-
-
 tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Initialize TCP socket
 print(f"{Fore.YELLOW}[*] Connecting to {sHOST}:{sPORT}...{Fore.RESET}")  # Return status
 
@@ -38,19 +26,37 @@ print(f"{Fore.GREEN}[+] Connected {Fore.RESET}")  # Return status
 name = input("Enter your name: ")  # Client inputs username
 
 
-def listen():  # Function to listen for messages
+# Create Keys and Open Them
+def create_keys_client():
+    client_public, client_private = rsa.newkeys(1024)
+    return client_public, client_private
+
+
+# Main key handling function
+def use_keys():
+    client_public, client_private = create_keys_client()
+    tcp.send(client_public.save_pkcs1('PEM'))  # Send the public key to the server right after establishing a connection
+    server_public_key_data = tcp.recv(4096)  # Assuming the next message from the server will be its public key
+    server_public = rsa.PublicKey.load_pkcs1(server_public_key_data)
+
+    return client_public, client_private, server_public
+
+
+client_public, client_private, server_public = use_keys()
+
+
+def listen(client_private_key):  # Function to listen for messages
     while True:
         try:
-            message = tcp.recv(1024)  # When message is received
-            decrypted_msg = rsa.decrypt(message, client_private).decode('utf-8')  # Decrypt Message
+            message = tcp.recv(4096)  # When message is received
+            decrypted_msg = rsa.decrypt(message, client_private_key).decode('utf-8')  # Decrypt Message
             print("\n" + decrypted_msg)  # Print message
         except Exception as e:
             print(f"{Fore.RED}Error: {e}{Fore.RESET}")
             break  # Break if error occurs
 
 
-threading.Thread(target=listen, daemon=True).start()  # Listen for messages always, Daemon ends thread when last thread ends
-
+threading.Thread(target=listen, args=(client_private,), daemon=True).start()  # Listen for messages always, Daemon ends thread when last thread ends
 
 while True:
     sending = input()  # Message being sent
