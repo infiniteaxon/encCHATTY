@@ -1,109 +1,81 @@
+import base64
 import socket
 import threading
 import rsa
-import os
-import base64
 from colorama import Fore, init
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
 
-init()  # Colorama
-colors = [Fore.BLUE, Fore.LIGHTBLUE_EX, Fore.CYAN, Fore.LIGHTCYAN_EX,
-          Fore.GREEN, Fore.LIGHTGREEN_EX, Fore.RED, Fore.LIGHTRED_EX,
-          Fore.MAGENTA, Fore.LIGHTMAGENTA_EX, Fore.YELLOW, Fore.LIGHTYELLOW_EX,
-          Fore.WHITE]
+init()  # Colorama initialization
 
 # Server Connection Info
-sHOST = socket.gethostbyname(socket.gethostname())
+sHOST = '0.0.0.0'  # Listen on all network interfaces
 sPORT = 2003
 
 print(f"{Fore.YELLOW}[*] Creating RSA Keys for Secure Communication... please wait{Fore.RESET}")
 server_public, server_private = rsa.newkeys(2048)
 print(f"{Fore.GREEN}[*] Key successfully generated!")
-client_keys = {}  # Dictionary to store public keys
-client_aes_keys = {}  # Dictionary to store AES keys
-# Initiate Client Sockets
-cSOCKETS = set()
-tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create TCP Socket
-tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Set Socket to be Reusable
-tcp.bind((sHOST, sPORT))  # Bind Socket to Server
-tcp.listen(5)  # Only 5 Connection can queue at once
-print(f"{Fore.GREEN}[*] Live on {sHOST}:{sPORT} {Fore.RESET}")  # Print Socket Connection Info
+
+client_keys = {}  # Dictionary to store public keys of clients
+cSOCKETS = set()  # Set to store client sockets
+first_client = None  # Reference to the first client
+
+tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+tcp.bind((sHOST, sPORT))
+tcp.listen(5)
+print(f"{Fore.GREEN}[*] Live on {sHOST}:{sPORT}{Fore.RESET}")
 
 
-def aes_encrypt(message, key):
-    iv = os.urandom(16)  # Generate a random 16-byte IV
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
-    encryptor = cipher.encryptor()
-
-    # Ensure message is in bytes
-    message_bytes = message.encode('utf-8')
-
-    encrypted_message = encryptor.update(message_bytes) + encryptor.finalize()
-    return base64.b64encode(iv + encrypted_message)  # Encode in Base64
-
-
-def aes_decrypt(encrypted_message, key):
-    try:
-        decoded_message = base64.b64decode(encrypted_message)
-    except (TypeError, ValueError) as e:
-        raise ValueError(f"{Fore.RED}[!] Error decoding message: {e}{Fore.RESET}")
-
-    if len(decoded_message) < 16:
-        raise ValueError(f"{Fore.RED}[!] Encrypted message too short to contain IV.{Fore.RESET}")
-
-    iv = decoded_message[:16]
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
-    decryptor = cipher.decryptor()
-
-    decrypted_data = decryptor.update(decoded_message[16:]) + decryptor.finalize()
-
-    try:
-        return decrypted_data.decode('utf-8')
-    except UnicodeDecodeError:
-        raise ValueError(f"{Fore.RED}[!] Decrypted data is not valid UTF-8{Fore.RESET}")
-
-
-# Function to broadcast messages to all clients
 def broadcast(message):
     for clientSOCKET in cSOCKETS:
-        aes_key = client_aes_keys[clientSOCKET]  # AES key for the client
-        encrypted_msg = aes_encrypt(message, aes_key)
-        clientSOCKET.send(encrypted_msg)
+        try:
+            clientSOCKET.send(message)
+        except Exception as e:
+            print(f"{Fore.RED}[!] Error sending to client: {e} {Fore.RESET}")
 
 
-# Function to Listen for Client Connections
-def client_connect(cSOCKET):
+def client_connect(cSOCKET, uADDRESS):
+    global first_client
     while True:
         try:
-            encrypted_aes_key = cSOCKET.recv(8192)
-            aes_key = rsa.decrypt(encrypted_aes_key, server_private)  # Decrypt AES key
-            client_aes_keys[cSOCKET] = aes_key
-            while True:
-                message = cSOCKET.recv(8192)
-                decrypted_msg = aes_decrypt(message, aes_key)
-                broadcast(decrypted_msg)
-        except Exception as e:  # Error Handling
-            print(f"{Fore.RED}[!] Error: {e} {Fore.RESET}")
-            cSOCKETS.remove(cSOCKET)  # Remove bad clients
-            broadcast(f"{Fore.YELLOW}[!] A user has disconnected.{Fore.RESET}")
-            cSOCKET.close()
+            message = cSOCKET.recv(8192)
+            if message:
+                broadcast(message)
+            else:
+                break  # Client disconnected
+        except Exception as e:
+            print(f"{Fore.RED}[!] Error with client {uADDRESS}: {e} {Fore.RESET}")
             break
+    cSOCKETS.remove(cSOCKET)
+    cSOCKET.close()
+    print(f"{Fore.YELLOW}[!] Client {uADDRESS} disconnected.{Fore.RESET}")
 
 
-# Accept new client connections
 try:
     while True:
         cSOCKET, uADDRESS = tcp.accept()
-        print(f"{Fore.GREEN}[+] {uADDRESS} connected. {Fore.RESET}")
+        print(f"{Fore.GREEN}[+] {uADDRESS} connected {Fore.RESET}")
         cSOCKETS.add(cSOCKET)
-        client_public_key_data = cSOCKET.recv(8192)  # Receive client's public key
+        cSOCKET.send(server_public.save_pkcs1('PEM'))
+        print(f"{Fore.GREEN}[*] Server Public Key Sent to: {uADDRESS}{Fore.RESET}")
+
+        client_public_key_data = cSOCKET.recv(8192)
         client_public_key = rsa.PublicKey.load_pkcs1(client_public_key_data)
-        cSOCKET.send(server_public.save_pkcs1('PEM'))  # Send server's public key to the client
-        threading.Thread(target=client_connect, args=(cSOCKET,), daemon=True).start()
+        client_keys[uADDRESS] = client_public_key
+        print(f"{Fore.GREEN}[*] Client Public Key Received from: {uADDRESS}{Fore.RESET}")
+
+        if not first_client:
+            first_client = cSOCKET
+            first_client.send(b"FIRST")
+            print(f"{Fore.YELLOW}[!] First client set: {uADDRESS}{Fore.RESET}")
+        else:
+            encoded_client_public_key = base64.b64encode(client_public_key_data)
+            first_client.send(f"NEW_USER#{uADDRESS}#{encoded_client_public_key.decode()}".encode())
+
+        threading.Thread(target=client_connect, args=(cSOCKET, uADDRESS), daemon=True).start()
 except KeyboardInterrupt:
-    print(f"{Fore.Yellow}[*] Server shutting down...{Fore.RESET}")
+    print(f"{Fore.YELLOW}[*] Server shutting down...{Fore.RESET}")
 finally:
     for client in cSOCKETS:
         client.close()
     tcp.close()
+    print(f"{Fore.RED}[*] Server shut down{Fore.RESET}")
