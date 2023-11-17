@@ -1,8 +1,11 @@
 # encCHATTY
 
-Welcome to my 1.3 version of CHATTY!
+Welcome to version 1.4 of CHATTY!
+
+I just got E2EE working and am very excited!
 
 Features:
+- End-to-end Encryption
 - Multiuser Support via Threads
 - Auto RSA Key Generation, Client Unique
 - Auto AES Key Generation, Client Unique
