@@ -10,7 +10,7 @@ Features:
 - End-to-end Encryption
 - Multiuser Support via Threads
 - Auto RSA Key Generation, Client Unique
-- Auto AES Key Generation, Client Unique
+- Auto AES Key Generation
 - Auto Key Exchange
 - Error Handling & Status Updates
 - Color Coded Status Updates
